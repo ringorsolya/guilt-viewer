@@ -1,0 +1,7 @@
+# This public repository holds viewer code only – never commit data
+*.json
+*.json.gz
+*.gz
+*.xlsx
+*.csv
+*.pkl

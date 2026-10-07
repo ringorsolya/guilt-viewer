@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guilt Corpus Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --page: #eef1f4;
+  --panel: #ffffff;
+  --ink: #17202b;
+  --ink-2: #4f5b6b;
+  --ink-3: #7c8796;
+  --rule: #d9dee5;
+  --rule-soft: #e8ecf0;
+  --political: #2a78d6;
+  --media: #d95926;
+  --guilt-bg: #ffd8cc;
+  --guilt-line: #c23a1e;
+  --anger-line: #c98500;
+  --focus: #2a78d6;
+  --chip: #e4e9ef;
+  --ok: #1f7a3a;
+  --per0: #86b6ef; --per1: #2a78d6; --per2: #0d366b; --political-l: #6da7ec; --political-d: #0d366b;
+  --sans: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Literata", Georgia, "Times New Roman", serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #12161b; --panel: #1b2027; --ink: #eef1f4; --ink-2: #b6bfca; --ink-3: #8a94a1;
+    --rule: #323a44; --rule-soft: #262d35; --political: #5b9cec; --media: #ec7a4b;
+    --guilt-bg: #5a2a20; --guilt-line: #ff8a6e; --anger-line: #e3a72f; --chip: #2a323c; --ok: #4cc06f;
+    --per0: #2b5a92; --per1: #5b9cec; --per2: #cde2fb; --political-l: #3b78c4; --political-d: #cde2fb;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #12161b; --panel: #1b2027; --ink: #eef1f4; --ink-2: #b6bfca; --ink-3: #8a94a1;
+  --rule: #323a44; --rule-soft: #262d35; --political: #5b9cec; --media: #ec7a4b;
+  --guilt-bg: #5a2a20; --guilt-line: #ff8a6e; --anger-line: #e3a72f; --chip: #2a323c; --ok: #4cc06f;
+  --per0: #2b5a92; --per1: #5b9cec; --per2: #cde2fb; --political-l: #3b78c4; --political-d: #cde2fb;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 15px/1.5 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+a { color: var(--political); }
+
+/* ---------- header */
+header.top {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  padding: 14px 24px; background: var(--panel); border-bottom: 1px solid var(--rule);
+}
+header.top h1 { font-size: 18px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+header.top .status { color: var(--ink-3); font-size: 13px; }
+.tabs { display: flex; gap: 4px; margin-left: auto; }
+.tabs button {
+  border: 0; background: transparent; padding: 7px 14px; border-radius: 6px; cursor: pointer; color: var(--ink-2);
+  font-weight: 600;
+}
+.tabs button[aria-selected="true"] { background: var(--chip); color: var(--ink); }
+
+/* ---------- empty state */
+#drop {
+  max-width: 640px; margin: 10vh auto; padding: 40px 36px; background: var(--panel);
+  border: 1.5px dashed var(--rule); border-radius: 14px;
+}
+#drop.over { border-color: var(--political); }
+#drop h2 { font: 600 26px/1.25 var(--serif); margin: 0 0 12px; }
+#drop p { color: var(--ink-2); margin: 0 0 14px; }
+#drop .privacy { font-size: 13px; color: var(--ink-3); margin-top: 18px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--rule); background: var(--panel);
+  padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600;
+}
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.btn:disabled { opacity: .5; cursor: default; }
+#loading { color: var(--ink-2); font-size: 14px; }
+
+/* ---------- browse layout */
+main.browse { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: calc(100vh - 58px); }
+aside.filters { background: var(--panel); border-right: 1px solid var(--rule); padding: 18px 18px 40px; overflow-y: auto; }
+aside.filters fieldset { border: 0; padding: 0; margin: 0 0 20px; }
+aside.filters legend { font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--ink); }
+aside.filters label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 2px 0; cursor: pointer; }
+aside.filters .group-name { font-size: 12px; color: var(--ink-3); margin: 8px 0 2px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dot.p { background: var(--political); } .dot.m { background: var(--media); }
+input[type="search"], select, input[type="text"], input[type="number"] {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 7px; background: var(--panel);
+}
+.seg { display: flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 6px 4px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.linkish { border: 0; background: none; padding: 0; color: var(--political); cursor: pointer; font-size: 13px; }
+
+section.results { padding: 18px 28px 60px; min-width: 0; }
+.summary { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.summary .count { font: 600 22px/1.2 var(--serif); }
+.summary .sub { color: var(--ink-2); font-size: 14px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { background: var(--chip); border-radius: 999px; padding: 3px 6px 3px 12px; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.chip button { border: 0; background: transparent; cursor: pointer; padding: 0 6px; font-size: 15px; line-height: 1; color: var(--ink-2); }
+
+/* timeline */
+.timeline { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px 6px; margin-bottom: 18px; }
+.timeline .head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.timeline .head strong { color: var(--ink); font-weight: 600; }
+.legend { display: flex; gap: 14px; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+#chart { width: 100%; height: 170px; display: block; }
+#chart text { fill: var(--ink-3); font: 11px var(--sans); }
+#chart .grid { stroke: var(--rule-soft); }
+#chart .axis { stroke: var(--rule); }
+#chart .hit { fill: transparent; cursor: pointer; }
+#chart .hit:hover, #chart .hit.sel { fill: var(--chip); }
+#chart .election { stroke: var(--ink-3); stroke-dasharray: 3 3; }
+#tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--panel); font-size: 12px; padding: 6px 9px; border-radius: 6px; display: none; z-index: 5; white-space: nowrap; }
+
+/* posts */
+ol.posts { list-style: none; padding: 0; margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; }
+ol.posts > li { padding: 16px 20px 14px; border-top: 1px solid var(--rule-soft); }
+ol.posts > li:first-child { border-top: 0; }
+.meta { display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--ink-2); }
+.meta .who { font-weight: 700; color: var(--ink); display: inline-flex; gap: 7px; align-items: center; }
+.meta .eng { margin-left: auto; display: flex; gap: 12px; font-variant-numeric: tabular-nums; }
+.meta .eng b { font-weight: 600; color: var(--ink); }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--ink-2); }
+.badge.g { background: var(--guilt-bg); color: var(--ink); }
+.text { font: 16px/1.62 var(--serif); margin: 8px 0 6px; max-width: 75ch; overflow-wrap: anywhere; }
+.text .s.g { background: var(--guilt-bg); box-shadow: inset 0 -2px 0 var(--guilt-line); border-radius: 2px; }
+.text .s.a { text-decoration: underline dotted var(--anger-line); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.text .s:hover { outline: 1px solid var(--rule); }
+.linktitle { font-size: 13px; color: var(--ink-3); margin: 0 0 6px; max-width: 75ch; }
+.post-actions { display: flex; gap: 16px; font-size: 13px; }
+table.sents { border-collapse: collapse; width: 100%; max-width: 900px; margin-top: 10px; font-size: 13px; }
+table.sents th, table.sents td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+table.sents th { color: var(--ink-3); font-weight: 600; }
+table.sents td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.more { display: flex; justify-content: center; padding: 16px; }
+.key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin: 0 0 10px; }
+.key .s { font: 14px var(--serif); color: var(--ink); padding: 0 3px; }
+.key .s.g { background: var(--guilt-bg); box-shadow: inset 0 -2px 0 var(--guilt-line); }
+.key .s.a { text-decoration: underline dotted var(--anger-line); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+/* ---------- charts */
+main.charts { max-width: 1180px; margin: 0 auto; padding: 22px 24px 80px; }
+.cintro { color: var(--ink-2); max-width: 78ch; margin: 0 0 18px; font-size: 14px; }
+.cgrid { display: grid; gap: 18px; }
+figure.chart { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px 14px; min-width: 0; }
+figure.chart h2 { font: 600 19px/1.3 var(--serif); margin: 0 0 4px; }
+figure.chart .rq { font: 600 12px var(--sans); color: var(--ink-3); margin-right: 8px; }
+figure.chart .lead { color: var(--ink-2); font-size: 14px; margin: 0 0 12px; max-width: 80ch; }
+figure.chart figcaption { color: var(--ink-3); font-size: 12px; margin-top: 8px; max-width: 90ch; }
+.ctools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
+.ctools .seg { display: inline-flex; }
+.ctools .seg button { padding: 4px 12px; white-space: nowrap; }
+.ctools .dl { margin-left: auto; }
+svg.c { width: 100%; display: block; overflow: visible; }
+svg.c text { fill: var(--ink-2); font: 12px var(--sans); }
+svg.c text.lab { fill: var(--ink); }
+svg.c text.small { font-size: 11px; fill: var(--ink-3); }
+svg.c .grid { stroke: var(--rule-soft); }
+svg.c .axis { stroke: var(--rule); }
+svg.c .sep { stroke: var(--rule); }
+svg.c .elec { stroke: var(--ink-3); stroke-dasharray: 3 3; }
+svg.c .hov { fill: transparent; }
+svg.c .hov:hover { fill: var(--chip); opacity: .6; }
+.smgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
+.smgrid h3 { font: 600 13px var(--sans); margin: 6px 0 0; display: flex; gap: 6px; align-items: center; }
+.ckey { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin: 0 0 8px; }
+.ckey span { display: inline-flex; gap: 6px; align-items: center; }
+.ckey i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.ckey i.line { width: 16px; height: 3px; border-radius: 2px; }
+.ckey i.sq { border-radius: 2px; }
+
+.hidden { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media (max-width: 820px) {
+  main.browse { grid-template-columns: 1fr; }
+  aside.filters { border-right: 0; border-bottom: 1px solid var(--rule); }
+  section.results { padding: 14px 16px 50px; }
+  .meta .eng { margin-left: 0; }
+  header.top { padding: 12px 16px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Guilt corpus viewer</h1>
+  <span class="status" id="status">No data loaded</span>
+  <nav class="tabs hidden" id="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="browse">Browse</button>
+    <button role="tab" aria-selected="false" data-tab="charts">Charts</button>
+  </nav>
+</header>
+
+<!-- ======================= empty state -->
+<section id="drop">
+  <h2>Open the corpus file to start</h2>
+  <p>Choose <code>corpus.json.gz</code> from the <code>results/viewer</code> folder of the guilt_analysis repository, or drop it here.</p>
+  <label class="btn primary" for="file">Open corpus file</label>
+  <input id="file" type="file" accept=".gz,.json,application/gzip,application/json" class="sr">
+  <p id="loading" class="hidden"></p>
+  <p class="privacy">The file is read inside your browser. Nothing is uploaded: the corpus never leaves your computer, so this page can be hosted publicly while the data stay private.</p>
+</section>
+
+<!-- ======================= browse -->
+<main class="browse hidden" id="browse">
+  <aside class="filters" aria-label="Filters">
+    <fieldset>
+      <legend>Search text</legend>
+      <input type="search" id="q" placeholder="e.g. korrupció, Brüsszel" autocomplete="off">
+    </fieldset>
+    <fieldset>
+      <legend>Guilt assignment</legend>
+      <div class="seg" id="guiltSeg">
+        <button aria-pressed="true" data-v="all">All posts</button>
+        <button aria-pressed="false" data-v="yes">With</button>
+        <button aria-pressed="false" data-v="no">Without</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Period</legend>
+      <div id="periods"></div>
+    </fieldset>
+    <fieldset>
+      <legend>Actors and outlets</legend>
+      <div id="actors"></div>
+      <button class="linkish" id="allActors">Select all</button> · <button class="linkish" id="noActors">Clear</button>
+    </fieldset>
+    <fieldset>
+      <legend>Sort by</legend>
+      <select id="sort">
+        <option value="date_asc">Date, oldest first</option>
+        <option value="date_desc">Date, newest first</option>
+        <option value="shares">Shares</option>
+        <option value="reactions">Reactions</option>
+        <option value="comments">Comments</option>
+        <option value="density">Guilt-assignment density</option>
+        <option value="nguilt">Guilt-assignment sentences</option>
+      </select>
+    </fieldset>
+  </aside>
+
+  <section class="results">
+    <div class="summary">
+      <span class="count" id="count">0 posts</span>
+      <span class="sub" id="countSub"></span>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="timeline">
+      <div class="head">
+        <span><strong>Weekly share of posts with guilt assignment</strong> in the current selection. Click a week to read its posts.</span>
+        <span class="legend"><span><i style="background:var(--political)"></i>Political actors</span><span><i style="background:var(--media)"></i>News outlets</span></span>
+      </div>
+      <svg id="chart" role="img" aria-label="Weekly share of posts with guilt assignment"></svg>
+    </div>
+
+    <div class="key">
+      <span><span class="s g">Guilt-assignment sentence</span></span>
+      <span><span class="s a">Anger sentence, no guilt assignment</span></span>
+      <span>Hover a sentence for model scores</span>
+    </div>
+    <ol class="posts" id="posts"></ol>
+    <div class="more"><button class="btn hidden" id="moreBtn">Show 40 more</button></div>
+  </section>
+</main>
+
+<!-- ======================= charts -->
+<main class="charts hidden" id="charts">
+  <p class="cintro">All charts are computed in your browser from the corpus file you opened. Hover any mark for exact values; click an actor or outlet name to read its posts. Each chart can be saved as SVG for slides.</p>
+  <div class="cgrid">
+    <figure class="chart" id="ch-coverage">
+      <h2>Data coverage</h2>
+      <p class="lead">Annotated posts per week. Empty weeks are collection gaps, not silence, unless checked otherwise.</p>
+      <div class="ctools"><button class="linkish dl" data-dl="ch-coverage">Save SVG</button></div>
+      <div class="body"></div>
+    </figure>
+    <figure class="chart" id="ch-rq1">
+      <h2><span class="rq">RQ1</span>Who produces guilt assignment?</h2>
+      <p class="lead">Share of posts with at least one guilt-assignment sentence, by actor or outlet and period, with 95% confidence intervals.</p>
+      <div class="ctools">
+        <span class="seg" data-ctl="rq1m"><button aria-pressed="true" data-v="share">Share of posts</button><button aria-pressed="false" data-v="density">Mean density</button><button aria-pressed="false" data-v="n">Sentences per post</button></span>
+        <button class="linkish dl" data-dl="ch-rq1">Save SVG</button>
+      </div>
+      <div class="ckey" id="rq1key"></div>
+      <div class="body"></div>
+      <figcaption>Density = guilt-assignment sentences / all sentences of a post. Baseline exists for political actors only.</figcaption>
+    </figure>
+    <figure class="chart" id="ch-weekly">
+      <h2><span class="rq">RQ1</span>Guilt assignment over time</h2>
+      <p class="lead">Weekly share of posts with guilt assignment. Weeks with fewer than 10 posts are left out.</p>
+      <div class="ctools">
+        <span class="seg" data-ctl="wkset"><button aria-pressed="true" data-v="0">Political actors</button><button aria-pressed="false" data-v="1">News outlets</button></span>
+        <button class="linkish dl" data-dl="ch-weekly">Save SVG</button>
+      </div>
+      <div class="body smgrid"></div>
+    </figure>
+    <figure class="chart" id="ch-rq2">
+      <h2><span class="rq">RQ2</span>Is guilt assignment amplified?</h2>
+      <p class="lead">Median engagement of posts with and without guilt assignment. The number shows how many times higher the median is for guilt-assignment posts.</p>
+      <div class="ctools">
+        <span class="seg" data-ctl="rq2m"><button aria-pressed="true" data-v="sh">Shares</button><button aria-pressed="false" data-v="re">Reactions</button><button aria-pressed="false" data-v="co">Comments</button></span>
+        <span class="seg" data-ctl="rq2p"><button aria-pressed="true" data-v="all">All periods</button><button aria-pressed="false" data-v="1">Pre-election</button><button aria-pressed="false" data-v="2">Post-election</button></span>
+        <button class="linkish dl" data-dl="ch-rq2">Save SVG</button>
+      </div>
+      <div class="ckey"><span><i style="background:var(--ink-3)"></i>No guilt assignment</span><span><i style="background:var(--guilt-line)"></i>Guilt assignment</span></div>
+      <div class="body"></div>
+      <figcaption>Descriptive medians on a log scale. Models with actor and week fixed effects and post-age controls: results/analysis_report.md.</figcaption>
+    </figure>
+    <figure class="chart" id="ch-rq3">
+      <h2><span class="rq">RQ3</span>Political and media guilt assignment week by week</h2>
+      <p class="lead">Weekly share of guilt-assignment posts in the common window (from 1 January 2026), and the correlation between the two series at different lags.</p>
+      <div class="ctools"><button class="linkish dl" data-dl="ch-rq3">Save SVG</button></div>
+      <div class="ckey"><span><i class="line" style="background:var(--political)"></i>Political actors</span><span><i class="line" style="background:var(--media)"></i>News outlets</span></div>
+      <div class="body"></div>
+      <figcaption>Lag k &gt; 0: political series k weeks earlier than media; k &lt; 0: media earlier. Pearson r on weekly shares, weeks with ≥10 posts in both series. A short series – read as co-movement, not influence.</figcaption>
+    </figure>
+    <figure class="chart" id="ch-rq4">
+      <h2><span class="rq">RQ4</span>What changed after the election?</h2>
+      <p class="lead">Share of posts with guilt assignment before and after 12 April 2026, and the sharing advantage of guilt-assignment posts (median shares, guilt / no guilt).</p>
+      <div class="ctools"><button class="linkish dl" data-dl="ch-rq4">Save SVG</button></div>
+      <div class="ckey"><span><i style="background:var(--political-l)"></i>Pre-election</span><span><i class="sq" style="background:var(--political-d)"></i>Post-election</span></div>
+      <div class="body"></div>
+      <figcaption>Post-election media data come from a different collection tool and end on 19 May; Fidesz and Viktor Orbán have under 70 post-election posts.</figcaption>
+    </figure>
+    <figure class="chart" id="ch-emo">
+      <h2>Emotions by actor and outlet</h2>
+      <p class="lead">Share of sentences by the emotion classifier's label. Guilt assignment is only scored on Anger sentences.</p>
+      <div class="ctools"><button class="linkish dl" data-dl="ch-emo">Save SVG</button></div>
+      <div class="ckey" id="emokey"></div>
+      <div class="body"></div>
+    </figure>
+  </div>
+</main>
+
+<div id="tip" role="tooltip"></div>
+
+<script>
+"use strict";
+// ------------------------------------------------------------------ state
+let D = null;           // corpus
+let P = [];             // posts (objects)
+let filtered = [];
+let shown = 0;
+const PAGE = 40;
+const ELECTION = Date.UTC(2026, 3, 12) / 60000;
+const F = { q: "", guilt: "all", periods: new Set(), actors: new Set(), week: null, sort: "date_asc" };
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const fmt = n => n == null ? "–" : n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : n.toLocaleString("en-US");
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+};
+
+function dateOf(min) { return new Date(min * 60000); }
+function fmtDate(min) {
+  const d = dateOf(min);
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) + ", " +
+    d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+}
+function weekOf(min) { // Monday 00:00 (Budapest local) in minutes
+  const d = dateOf(min);
+  const day = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day) / 60000;
+}
+
+// ------------------------------------------------------------------ loading
+const fileInput = $("#file"), drop = $("#drop");
+fileInput.addEventListener("change", e => e.target.files[0] && load(e.target.files[0]));
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => e.dataTransfer.files[0] && load(e.dataTransfer.files[0]));
+
+async function load(file) {
+  const msg = $("#loading");
+  msg.classList.remove("hidden");
+  msg.textContent = "Reading " + file.name + "…";
+  try {
+    const buf = await file.arrayBuffer();
+    const head = new Uint8Array(buf.slice(0, 2));
+    let text;
+    if (head[0] === 0x1f && head[1] === 0x8b) {
+      if (!("DecompressionStream" in window)) throw new Error("This browser cannot unzip the file. Use a current Chrome, Edge, Firefox or Safari.");
+      const ds = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
+      text = await new Response(ds).text();
+    } else text = new TextDecoder().decode(buf);
+    msg.textContent = "Preparing " + file.name + "…";
+    await new Promise(r => setTimeout(r, 20));
+    init(JSON.parse(text));
+  } catch (err) {
+    msg.textContent = "Could not open the file: " + err.message + " Choose corpus.json.gz from results/viewer.";
+  }
+}
+
+function init(data) {
+  D = data;
+  const M = D.meta;
+  P = D.posts.map(r => {
+    const s = r[11];
+    const nG = s.reduce((a, x) => a + (x[2] === 1), 0);
+    const nA = s.reduce((a, x) => a + (x[2] !== -1), 0);
+    return {
+      id: r[0], a: r[1], src: r[2], per: r[3], t: r[4], url: r[5], lt: r[6], sh: r[7], re: r[8], co: r[9], age: r[10],
+      s, nG, nA, dens: s.length ? nG / s.length : 0, wk: weekOf(r[4]),
+      norm: null,
+    };
+  });
+  M.actors.forEach((_, i) => F.actors.add(i));
+  M.periods.forEach((_, i) => F.periods.add(i));
+  buildFilters();
+  $("#drop").classList.add("hidden");
+  $("#tabs").classList.remove("hidden");
+  $("#browse").classList.remove("hidden");
+  $("#status").textContent = `${M.n_posts.toLocaleString("en-US")} posts · ${M.n_sentences.toLocaleString("en-US")} sentences · exported ${M.generated}`;
+  apply();
+}
+
+// ------------------------------------------------------------------ filters UI
+function buildFilters() {
+  const M = D.meta;
+  const per = $("#periods");
+  per.innerHTML = M.periods.map((p, i) => {
+    const n = P.filter(x => x.per === i).length;
+    const lab = { baseline: "Baseline (Oct–Dec 2025)", "pre-election": "Pre-election (1 Jan–12 Apr)", "post-election": "Post-election (13 Apr–20 Jun)" }[p] || p;
+    return `<label class="check"><input type="checkbox" data-per="${i}" checked> ${esc(lab)} <span style="color:var(--ink-3);margin-left:auto">${fmt(n)}</span></label>`;
+  }).join("");
+  per.addEventListener("change", e => { const i = +e.target.dataset.per; e.target.checked ? F.periods.add(i) : F.periods.delete(i); apply(); });
+
+  const act = $("#actors");
+  let html = "";
+  [0, 1].forEach(src => {
+    html += `<div class="group-name">${src ? "News outlets" : "Political actors"}</div>`;
+    M.actors.forEach((a, i) => {
+      if (M.actor_source[i] !== src) return;
+      const n = P.filter(x => x.a === i).length;
+      html += `<label class="check"><input type="checkbox" data-actor="${i}" checked><span class="dot ${src ? "m" : "p"}"></span>${esc(a)}<span style="color:var(--ink-3);margin-left:auto">${fmt(n)}</span></label>`;
+    });
+  });
+  act.innerHTML = html;
+  act.addEventListener("change", e => { const i = +e.target.dataset.actor; e.target.checked ? F.actors.add(i) : F.actors.delete(i); apply(); });
+  $("#allActors").onclick = () => { M.actors.forEach((_, i) => F.actors.add(i)); act.querySelectorAll("input").forEach(c => c.checked = true); apply(); };
+  $("#noActors").onclick = () => { F.actors.clear(); act.querySelectorAll("input").forEach(c => c.checked = false); apply(); };
+
+  let tmr;
+  $("#q").addEventListener("input", e => { clearTimeout(tmr); tmr = setTimeout(() => { F.q = e.target.value.trim(); apply(); }, 220); });
+  $("#guiltSeg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    F.guilt = b.dataset.v;
+    $("#guiltSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    apply(false);
+  });
+  $("#sort").addEventListener("change", e => { F.sort = e.target.value; apply(false); });
+}
+
+function textNorm(p) {
+  if (p.norm === null) p.norm = norm((p.lt || "") + " " + p.s.map(x => x[0]).join(" "));
+  return p.norm;
+}
+
+// ------------------------------------------------------------------ filtering
+function apply(redrawChart = true) {
+  const q = F.q ? norm(F.q) : "";
+  // the chart shows the guilt share, so it ignores the guilt filter
+  const base = P.filter(p => F.actors.has(p.a) && F.periods.has(p.per) && (!q || textNorm(p).includes(q)));
+  if (redrawChart) drawChart(base);
+  filtered = base.filter(p => (F.guilt === "all" || (F.guilt === "yes" ? p.nG > 0 : p.nG === 0)) &&
+    (F.week === null || p.wk === F.week));
+  const key = { date_asc: p => p.t, date_desc: p => -p.t, shares: p => -(p.sh ?? -1), reactions: p => -(p.re ?? -1),
+    comments: p => -(p.co ?? -1), density: p => -p.dens, nguilt: p => -p.nG }[F.sort];
+  filtered.sort((x, y) => key(x) - key(y) || x.t - y.t);
+  const g = filtered.filter(p => p.nG > 0).length;
+  $("#count").textContent = filtered.length.toLocaleString("en-US") + (filtered.length === 1 ? " post" : " posts");
+  $("#countSub").textContent = filtered.length ? `${(100 * g / filtered.length).toFixed(1)}% with guilt assignment` : "";
+  renderChips();
+  $("#posts").innerHTML = "";
+  shown = 0;
+  more();
+}
+
+function renderChips() {
+  const c = [];
+  if (F.week !== null) {
+    const d = dateOf(F.week);
+    c.push(`<span class="chip">Week of ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}<button aria-label="Clear week" data-clear="week">×</button></span>`);
+  }
+  if (F.q) c.push(`<span class="chip">“${esc(F.q)}”<button aria-label="Clear search" data-clear="q">×</button></span>`);
+  const el = $("#chips");
+  el.innerHTML = c.join("");
+  el.onclick = e => {
+    const k = e.target.dataset.clear; if (!k) return;
+    if (k === "week") F.week = null;
+    if (k === "q") { F.q = ""; $("#q").value = ""; }
+    apply();
+  };
+}
+
+// ------------------------------------------------------------------ posts
+$("#moreBtn").onclick = () => more();
+function more() {
+  const ol = $("#posts");
+  const frag = document.createDocumentFragment();
+  filtered.slice(shown, shown + PAGE).forEach(p => frag.appendChild(postEl(p)));
+  ol.appendChild(frag);
+  shown = Math.min(shown + PAGE, filtered.length);
+  const b = $("#moreBtn");
+  b.classList.toggle("hidden", shown >= filtered.length);
+  b.textContent = `Show ${Math.min(PAGE, filtered.length - shown)} more`;
+  if (!filtered.length) ol.innerHTML = `<li style="color:var(--ink-2)">No posts match these filters. Widen the period or actor selection, or clear the search.</li>`;
+}
+
+function highlight(text, q) {
+  const t = esc(text);
+  if (!q) return t;
+  // accent-insensitive highlight: find match positions on normalised text
+  const n = norm(text), nq = norm(q);
+  let out = "", i = 0, j;
+  while ((j = n.indexOf(nq, i)) !== -1) {
+    out += esc(text.slice(i, j)) + "<b>" + esc(text.slice(j, j + nq.length)) + "</b>";
+    i = j + nq.length;
+  }
+  return out + esc(text.slice(i));
+}
+
+function postEl(p) {
+  const M = D.meta;
+  const li = document.createElement("li");
+  const src = p.src ? "m" : "p";
+  const sents = p.s.map((x, k) => {
+    const cls = x[2] === 1 ? "s g" : x[2] === 0 ? "s a" : "s";
+    const tip = `${M.emotions[x[1]]}` + (x[4] != null ? ` · anger p=${x[4].toFixed(2)}` : "") + (x[2] !== -1 && x[3] != null ? ` · guilt p=${x[3].toFixed(2)}` : "");
+    return `<span class="${cls}" data-tip="${esc(tip)}">${highlight(x[0], F.q)}</span>`;
+  }).join(" ");
+  li.innerHTML = `
+    <div class="meta">
+      <span class="who"><span class="dot ${src}"></span>${esc(M.actors[p.a])}</span>
+      <span>${fmtDate(p.t)}</span>
+      <span class="badge">${esc(M.periods[p.per])}</span>
+      ${p.nG ? `<span class="badge g">${p.nG} of ${p.s.length} sentences guilt</span>` : ""}
+      <span class="eng" title="Post age at collection: ${p.age ?? "?"} days"><span><b>${fmt(p.sh)}</b> shares</span><span><b>${fmt(p.re)}</b> reactions</span><span><b>${fmt(p.co)}</b> comments</span></span>
+    </div>
+    <p class="text">${sents}</p>
+    ${p.lt ? `<p class="linktitle">Linked article: ${esc(p.lt)}</p>` : ""}
+    <div class="post-actions">
+      <button class="linkish" data-act="details">Sentence scores</button>
+      ${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Open on Facebook</a>` : ""}
+      <button class="linkish" data-act="copy" title="Copy post ID">ID ${esc(p.id)}</button>
+    </div>`;
+  li.querySelector('[data-act="details"]').onclick = e => {
+    const ex = li.querySelector("table");
+    if (ex) { ex.remove(); e.target.textContent = "Sentence scores"; return; }
+    e.target.textContent = "Hide sentence scores";
+    const rows = p.s.map((x, k) => `<tr><td class="num">${k + 1}</td><td>${esc(x[0])}</td><td>${esc(M.emotions[x[1]])}</td><td class="num">${x[4] == null ? "–" : x[4].toFixed(2)}</td><td class="num">${x[2] === -1 ? "not scored" : (x[2] ? "yes " : "no ") + (x[3] == null ? "" : x[3].toFixed(2))}</td></tr>`).join("");
+    li.insertAdjacentHTML("beforeend", `<table class="sents"><thead><tr><th>#</th><th>Sentence</th><th>Emotion</th><th>P(anger)</th><th>Guilt (p)</th></tr></thead><tbody>${rows}</tbody></table>`);
+  };
+  li.querySelector('[data-act="copy"]').onclick = e => { try { navigator.clipboard.writeText(p.id); e.target.textContent = "ID copied"; } catch (err) { /* ignore */ } };
+  return li;
+}
+
+// tooltips for sentences
+const tip = $("#tip");
+document.addEventListener("mouseover", e => {
+  const t = e.target.closest("[data-tip]");
+  if (!t) { tip.style.display = "none"; return; }
+  tip.textContent = t.dataset.tip; tip.style.display = "block";
+});
+document.addEventListener("mousemove", e => { if (tip.style.display === "block") { tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 14 + "px"; } });
+
+// ------------------------------------------------------------------ chart
+function drawChart(base) {
+  const svg = $("#chart");
+  const W = svg.clientWidth || 800, H = 170, L = 36, R = 8, T = 8, B = 22;
+  const all = P;
+  const w0 = Math.min(...all.map(p => p.wk)), w1 = Math.max(...all.map(p => p.wk));
+  const weeks = []; for (let w = w0; w <= w1; w += 7 * 1440) weeks.push(w);
+  const agg = [0, 1].map(() => new Map());
+  base.forEach(p => { const m = agg[p.src]; const v = m.get(p.wk) || [0, 0]; v[0]++; v[1] += p.nG > 0; m.set(p.wk, v); });
+  const x = w => L + (w - w0) / (w1 - w0 + 7 * 1440) * (W - L - R);
+  const bw = (W - L - R) / weeks.length;
+  const vals = [];
+  agg.forEach(m => m.forEach(v => { if (v[0] >= 5) vals.push(v[1] / v[0]); }));
+  const ymax = Math.max(0.1, Math.ceil((Math.max(0, ...vals)) * 10) / 10);
+  const y = v => T + (1 - v / ymax) * (H - T - B);
+  let s = "";
+  for (let g = 0; g <= ymax + 1e-9; g += ymax > 0.5 ? 0.2 : 0.1) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}"/><text x="${L - 6}" y="${y(g) + 4}" text-anchor="end">${Math.round(g * 100)}%</text>`;
+  weeks.forEach(w => { const d = dateOf(w); if (d.getUTCDate() <= 7) s += `<text x="${x(w)}" y="${H - 6}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}${d.getUTCMonth() === 0 ? " " + d.getUTCFullYear() : ""}</text>`; });
+  weeks.forEach(w => s += `<rect class="hit${F.week === w ? " sel" : ""}" data-w="${w}" x="${x(w)}" y="${T}" width="${bw}" height="${H - T - B}"/>`);
+  s += `<line class="election" x1="${x(ELECTION)}" x2="${x(ELECTION)}" y1="${T}" y2="${H - B}"/>`;
+  [0, 1].forEach(src => {
+    const col = src ? "var(--media)" : "var(--political)";
+    let path = "", pen = false;
+    weeks.forEach(w => {
+      const v = agg[src].get(w);
+      if (!v || v[0] < 5) { pen = false; return; }
+      const px = x(w) + bw / 2, py = y(v[1] / v[0]);
+      path += (pen ? "L" : "M") + px.toFixed(1) + "," + py.toFixed(1); pen = true;
+      s += `<circle cx="${px}" cy="${py}" r="2.2" fill="${col}" pointer-events="none"/>`;
+    });
+    if (path) s += `<path d="${path}" fill="none" stroke="${col}" stroke-width="2" pointer-events="none"/>`;
+  });
+  s += `<line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = s;
+  svg.onclick = e => { const r = e.target.closest(".hit"); if (!r) return; const w = +r.dataset.w; F.week = F.week === w ? null : w; apply(); };
+  svg.onmousemove = e => {
+    const r = e.target.closest(".hit"); if (!r) { tip.style.display = "none"; return; }
+    const w = +r.dataset.w, d = dateOf(w);
+    const part = [0, 1].map(src => { const v = agg[src].get(w); return v ? `${src ? "media" : "political"} ${(100 * v[1] / v[0]).toFixed(0)}% of ${v[0]}` : null; }).filter(Boolean).join(" · ");
+    tip.textContent = `Week of ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}: ${part || "no posts"}`;
+    tip.style.display = "block"; tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 14 + "px";
+  };
+  svg.onmouseleave = () => tip.style.display = "none";
+}
+window.addEventListener("resize", () => { if (D) apply(); });
+
+// ------------------------------------------------------------------ tabs
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  $("#tabs").querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x === b));
+  $("#browse").classList.toggle("hidden", b.dataset.tab !== "browse");
+  $("#charts").classList.toggle("hidden", b.dataset.tab !== "charts");
+  if (b.dataset.tab === "charts") drawCharts();
+});
+
+// ------------------------------------------------------------------ charts
+const CH = { rq1m: "share", wkset: "0", rq2m: "sh", rq2p: "all" };
+const PERCOL = ["var(--per0)", "var(--per1)", "var(--per2)"];
+const EMOCOL = { Anger: "#e34948", Fear: "#4a3aa7", Disgust: "#008300", Sadness: "#2a78d6", Joy: "#eda100" };
+let chartsDrawn = false;
+
+function wilson(k, n) {
+  if (!n) return [NaN, NaN];
+  const z = 1.96, p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d, h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+  return [c - h, c + h];
+}
+function median(a) { if (!a.length) return NaN; const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function pct(v, d = 0) { return isFinite(v) ? (100 * v).toFixed(d) + "%" : "–"; }
+function body(id) { return $(`#${id} .body`); }
+function tipOn(el, html) { el.dataset.tip = html; }
+function actorOrder() { return D.meta.actors.map((a, i) => i); }
+function goBrowse(ai) { // open the posts of one actor in Browse
+  F.actors = new Set([ai]); F.week = null;
+  $("#actors").querySelectorAll("input").forEach(c => c.checked = +c.dataset.actor === ai);
+  $("#tabs").querySelector('[data-tab="browse"]').click();
+  apply();
+}
+function actorLabels(x, y0, step, n, extra = "") {
+  const M = D.meta;
+  let s = "";
+  actorOrder().forEach((ai, r) => {
+    const y = y0 + r * step;
+    s += `<text class="lab" x="${x}" y="${y + 4}" text-anchor="end" style="cursor:pointer" data-actor-link="${ai}">${esc(M.actors[ai])}</text>`;
+  });
+  const sep = M.actor_source.findIndex(v => v === 1);
+  if (sep > 0) s += `<line class="sep" x1="${x - 150}" x2="${extra || 2000}" y1="${y0 + (sep - .5) * step}" y2="${y0 + (sep - .5) * step}"/>`;
+  return s;
+}
+function wireActorLinks(root) { root.querySelectorAll("[data-actor-link]").forEach(t => t.onclick = () => goBrowse(+t.dataset.actorLink)); }
+function xTicks(x, ticks, y0, y1, fmtT) { return ticks.map(t => `<line class="grid" x1="${x(t)}" x2="${x(t)}" y1="${y0}" y2="${y1}"/><text class="small" x="${x(t)}" y="${y1 + 14}" text-anchor="middle">${fmtT(t)}</text>`).join(""); }
+
+function drawCharts() {
+  if (!D) return;
+  chartCoverage(); chartRQ1(); chartWeekly(); chartRQ2(); chartRQ3(); chartRQ4(); chartEmotions();
+  chartsDrawn = true;
+}
+
+// coverage heatmap
+function chartCoverage() {
+  const M = D.meta, el = body("ch-coverage");
+  const W = el.clientWidth || 1000, L = 130, R = 10, rowH = 18, T = 4, n = M.actors.length, H = T + n * rowH + 26;
+  const w0 = Math.min(...P.map(p => p.wk)), w1 = Math.max(...P.map(p => p.wk)), weeks = [];
+  for (let w = w0; w <= w1; w += 10080) weeks.push(w);
+  const cnt = new Map(); P.forEach(p => { const k = p.a + ":" + p.wk; cnt.set(k, (cnt.get(k) || 0) + 1); });
+  const cw = (W - L - R) / weeks.length;
+  let s = "";
+  actorOrder().forEach((ai, r) => {
+    const startW = M.actor_source[ai] ? Date.UTC(2025, 11, 29) / 60000 : Date.UTC(2025, 8, 29) / 60000;
+    weeks.forEach((w, c) => {
+      if (w < startW) return;
+      const v = cnt.get(ai + ":" + w) || 0;
+      const op = v ? Math.min(1, .18 + Math.log10(v + 1) / 2.6) : 1;
+      const fill = v ? (M.actor_source[ai] ? "var(--media)" : "var(--political)") : "var(--guilt-bg)";
+      const d = dateOf(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+      s += `<rect x="${L + c * cw}" y="${T + r * rowH + 2}" width="${Math.max(1, cw - 1)}" height="${rowH - 4}" fill="${fill}" fill-opacity="${op}" data-tip="${esc(M.actors[ai])}, week of ${d}: ${v} posts"/>`;
+    });
+  });
+  weeks.forEach((w, c) => { const d = dateOf(w); if (d.getUTCDate() <= 7) s += `<text class="small" x="${L + c * cw}" y="${H - 6}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}${d.getUTCMonth() === 0 || c === 0 ? " " + d.getUTCFullYear() : ""}</text>`; });
+  const ex = L + (ELECTION - w0) / 10080 * cw;
+  s += `<line class="elec" x1="${ex}" x2="${ex}" y1="${T}" y2="${T + n * rowH}"/>`;
+  s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
+  wireActorLinks(el);
+}
+
+// RQ1 dot plot by actor x period
+function chartRQ1() {
+  const M = D.meta, el = body("ch-rq1"), m = CH.rq1m;
+  $("#rq1key").innerHTML = M.periods.map((p, i) => `<span><i style="background:${PERCOL[i]}"></i>${{ baseline: "Baseline (Oct–Dec 2025)", "pre-election": "Pre-election", "post-election": "Post-election" }[p] || p}</span>`).join("");
+  const W = el.clientWidth || 1000, L = 140, R = 40, rowH = 30, T = 6, n = M.actors.length, H = T + n * rowH + 24;
+  const stats = [];
+  actorOrder().forEach(ai => M.periods.forEach((_, pi) => {
+    const ps = P.filter(p => p.a === ai && p.per === pi); if (!ps.length) return;
+    let v, lo, hi;
+    if (m === "share") { const k = ps.filter(p => p.nG > 0).length; v = k / ps.length; [lo, hi] = wilson(k, ps.length); }
+    else { const xs = ps.map(p => m === "density" ? p.dens : p.nG), mu = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mu) ** 2, 0) / Math.max(1, xs.length - 1)), se = sd / Math.sqrt(xs.length); v = mu; lo = mu - 1.96 * se; hi = mu + 1.96 * se; }
+    stats.push({ ai, pi, v, lo: Math.max(0, lo), hi, n: ps.length });
+  }));
+  const xmax = Math.max(...stats.map(s => s.hi)) * 1.05 || 1;
+  const x = v => L + v / xmax * (W - L - R);
+  const step = m === "n" ? (xmax > 2 ? 0.5 : 0.25) : xmax > .5 ? .1 : .05, ticks = []; for (let t = 0; t <= xmax; t += step) ticks.push(+t.toFixed(3));
+  let s = xTicks(x, ticks, T, T + n * rowH, t => m === "n" ? t.toFixed(2) : Math.round(t * 100) + "%");
+  stats.forEach(st => {
+    const r = actorOrder().indexOf(st.ai), y = T + r * rowH + rowH / 2 + (st.pi - 1) * 7;
+    const val = m === "n" ? st.v.toFixed(2) : pct(st.v, 1);
+    s += `<line x1="${x(st.lo)}" x2="${x(st.hi)}" y1="${y}" y2="${y}" stroke="${PERCOL[st.pi]}" stroke-width="1.5"/>`;
+    s += `<circle cx="${x(st.v)}" cy="${y}" r="4.5" fill="${PERCOL[st.pi]}" stroke="var(--panel)" stroke-width="1.5" data-tip="${esc(M.actors[st.ai])}, ${M.periods[st.pi]}: ${val} (95% CI ${m === "n" ? st.lo.toFixed(2) + "–" + st.hi.toFixed(2) : pct(st.lo, 1) + "–" + pct(st.hi, 1)}), ${st.n} posts"/>`;
+  });
+  s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
+  wireActorLinks(el);
+}
+
+// weekly small multiples
+function chartWeekly() {
+  const M = D.meta, el = body("ch-weekly"), src = +CH.wkset;
+  const w0 = Math.min(...P.filter(p => p.src === src).map(p => p.wk)), w1 = Math.max(...P.filter(p => p.src === src).map(p => p.wk));
+  const agg = new Map(); P.forEach(p => { if (p.src !== src) return; const k = p.a + ":" + p.wk; const v = agg.get(k) || [0, 0]; v[0]++; v[1] += p.nG > 0; agg.set(k, v); });
+  let ymax = 0; agg.forEach(v => { if (v[0] >= 10) ymax = Math.max(ymax, v[1] / v[0]); }); ymax = Math.ceil(ymax * 10) / 10 || .1;
+  const col = src ? "var(--media)" : "var(--political)";
+  el.innerHTML = actorOrder().filter(ai => M.actor_source[ai] === src).map(ai => {
+    const W = 300, H = 120, L = 30, R = 6, T = 6, B = 18;
+    const x = w => L + (w - w0) / Math.max(1, w1 - w0) * (W - L - R), y = v => T + (1 - v / ymax) * (H - T - B);
+    let s = "", path = "", pen = false;
+    for (let g = 0; g <= ymax + 1e-9; g += ymax > .4 ? .2 : .1) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}"/><text class="small" x="${L - 4}" y="${y(g) + 4}" text-anchor="end">${Math.round(g * 100)}%</text>`;
+    for (let w = w0; w <= w1; w += 10080) {
+      const v = agg.get(ai + ":" + w);
+      if (!v || v[0] < 10) { pen = false; continue; }
+      const px = x(w), py = y(v[1] / v[0]);
+      path += (pen ? "L" : "M") + px.toFixed(1) + "," + py.toFixed(1); pen = true;
+      const d = dateOf(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+      s += `<circle cx="${px}" cy="${py}" r="2.4" fill="${col}" data-tip="Week of ${d}: ${pct(v[1] / v[0])} of ${v[0]} posts"/>`;
+    }
+    s = `<path d="${path}" fill="none" stroke="${col}" stroke-width="1.8"/>` + s;
+    s += `<line class="elec" x1="${x(ELECTION)}" x2="${x(ELECTION)}" y1="${T}" y2="${H - B}"/>`;
+    for (let w = w0; w <= w1; w += 10080) { const d = dateOf(w); if (d.getUTCDate() <= 7 && d.getUTCMonth() % 2 === 0) s += `<text class="small" x="${x(w)}" y="${H - 4}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}</text>`; }
+    return `<div><h3 style="cursor:pointer" data-actor-link="${ai}"><span class="dot ${src ? "m" : "p"}"></span>${esc(M.actors[ai])}</h3><svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg></div>`;
+  }).join("");
+  wireActorLinks(el);
+}
+
+// RQ2 dumbbell (log scale)
+function chartRQ2() {
+  const M = D.meta, el = body("ch-rq2"), key = CH.rq2m, per = CH.rq2p;
+  const W = el.clientWidth || 1000, L = 140, R = 70, rowH = 26, T = 6, n = M.actors.length, H = T + n * rowH + 24;
+  const rows = actorOrder().map(ai => {
+    const ps = P.filter(p => p.a === ai && (per === "all" || p.per === +per) && p[key] != null);
+    return { ai, no: median(ps.filter(p => !p.nG).map(p => p[key])), yes: median(ps.filter(p => p.nG).map(p => p[key])),
+      nNo: ps.filter(p => !p.nG).length, nYes: ps.filter(p => p.nG).length };
+  });
+  const vals = rows.flatMap(r => [r.no, r.yes]).filter(v => isFinite(v) && v > 0);
+  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  const x = v => L + (Math.log10(Math.max(v, lo)) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (W - L - R);
+  const ticks = []; for (let t = lo; t <= hi; t *= 10) ticks.push(t);
+  let s = xTicks(x, ticks, T, T + n * rowH, t => t >= 1000 ? t / 1000 + "k" : String(t));
+  const name = { sh: "shares", re: "reactions", co: "comments" }[key];
+  rows.forEach((r, i) => {
+    const y = T + i * rowH + rowH / 2;
+    if (!isFinite(r.no) || !isFinite(r.yes)) return;
+    s += `<line x1="${x(r.no)}" x2="${x(r.yes)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/>`;
+    s += `<circle cx="${x(r.no)}" cy="${y}" r="5" fill="var(--ink-3)" data-tip="${esc(M.actors[r.ai])}: median ${fmt(r.no)} ${name} without guilt assignment (${r.nNo} posts)"/>`;
+    s += `<circle cx="${x(r.yes)}" cy="${y}" r="5" fill="var(--guilt-line)" data-tip="${esc(M.actors[r.ai])}: median ${fmt(r.yes)} ${name} with guilt assignment (${r.nYes} posts)"/>`;
+    const ratio = r.no > 0 ? r.yes / r.no : NaN;
+    s += `<text class="small" x="${W - R + 8}" y="${y + 4}">${isFinite(ratio) ? "×" + ratio.toFixed(2) : ""}</text>`;
+  });
+  s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
+  wireActorLinks(el);
+}
+
+// RQ3 political vs media weekly + cross-correlation
+function chartRQ3() {
+  const el = body("ch-rq3");
+  const start = Date.UTC(2026, 0, 1) / 60000;
+  const agg = [new Map(), new Map()];
+  P.forEach(p => { if (p.t < start) return; const v = agg[p.src].get(p.wk) || [0, 0]; v[0]++; v[1] += p.nG > 0; agg[p.src].set(p.wk, v); });
+  const weeks = [...new Set([...agg[0].keys(), ...agg[1].keys()])].sort((a, b) => a - b);
+  const w0 = weeks[0], w1 = weeks[weeks.length - 1];
+  const W = el.clientWidth || 1000, Wl = Math.max(420, W * 0.66), L = 40, R = 10, T = 8, B = 22, H = 230;
+  const sh = (src, w) => { const v = agg[src].get(w); return v && v[0] >= 10 ? v[1] / v[0] : NaN; };
+  let ymax = 0; weeks.forEach(w => [0, 1].forEach(s => { const v = sh(s, w); if (isFinite(v)) ymax = Math.max(ymax, v); })); ymax = Math.ceil(ymax * 10) / 10 || .1;
+  const x = w => L + (w - w0) / Math.max(1, w1 - w0) * (Wl - L - R), y = v => T + (1 - v / ymax) * (H - T - B);
+  let s = "";
+  for (let g = 0; g <= ymax + 1e-9; g += .1) s += `<line class="grid" x1="${L}" x2="${Wl - R}" y1="${y(g)}" y2="${y(g)}"/><text class="small" x="${L - 5}" y="${y(g) + 4}" text-anchor="end">${Math.round(g * 100)}%</text>`;
+  [0, 1].forEach(src => {
+    const col = src ? "var(--media)" : "var(--political)"; let path = "", pen = false;
+    for (let w = w0; w <= w1; w += 10080) {
+      const v = sh(src, w); if (!isFinite(v)) { pen = false; continue; }
+      path += (pen ? "L" : "M") + x(w).toFixed(1) + "," + y(v).toFixed(1); pen = true;
+      const d = dateOf(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+      s += `<circle cx="${x(w)}" cy="${y(v)}" r="3" fill="${col}" data-tip="${src ? "News outlets" : "Political actors"}, week of ${d}: ${pct(v)} of ${agg[src].get(w)[0]} posts"/>`;
+    }
+    s = `<path d="${path}" fill="none" stroke="${col}" stroke-width="2"/>` + s;
+  });
+  s += `<line class="elec" x1="${x(ELECTION)}" x2="${x(ELECTION)}" y1="${T}" y2="${H - B}"/>`;
+  for (let w = w0; w <= w1; w += 10080) { const d = dateOf(w); if (d.getUTCDate() <= 7) s += `<text class="small" x="${x(w)}" y="${H - 5}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}</text>`; }
+  // cross-correlation media(t) vs political(t-k)
+  const series = []; for (let w = w0; w <= w1; w += 10080) series.push([sh(0, w), sh(1, w)]);
+  const corr = k => { const a = [], b = []; series.forEach((v, t) => { const u = series[t - k]; if (u && isFinite(v[1]) && isFinite(u[0])) { a.push(u[0]); b.push(v[1]); } });
+    const n = a.length; if (n < 5) return [NaN, n]; const ma = a.reduce((p, c) => p + c) / n, mb = b.reduce((p, c) => p + c) / n;
+    let num = 0, da = 0, db = 0; for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; } return [num / Math.sqrt(da * db), n]; };
+  const X0 = Wl + 40, CW = W - X0 - 10, lags = [-2, -1, 0, 1, 2], CT = T + 22, cy = r => CT + (1 - (r + 1) / 2) * (H - CT - B);
+  s += `<text class="lab" x="${X0}" y="${T + 2}" style="font-weight:600">Cross-correlation</text>`;
+  [-1, -.5, 0, .5, 1].forEach(g => s += `<line class="grid" x1="${X0 + 26}" x2="${X0 + CW}" y1="${cy(g)}" y2="${cy(g)}"/><text class="small" x="${X0 + 22}" y="${cy(g) + 4}" text-anchor="end">${g}</text>`);
+  const bw = (CW - 30) / lags.length;
+  lags.forEach((k, i) => {
+    const [r, n] = corr(k), bx = X0 + 30 + i * bw;
+    if (isFinite(r)) s += `<rect x="${bx + bw * .2}" y="${Math.min(cy(r), cy(0))}" width="${bw * .6}" height="${Math.abs(cy(r) - cy(0))}" fill="${k > 0 ? "var(--political)" : k < 0 ? "var(--media)" : "var(--ink-3)"}" data-tip="lag ${k}: r = ${r.toFixed(2)} (${n} weeks) – ${k > 0 ? "political leads" : k < 0 ? "media leads" : "same week"}"/>`;
+    s += `<text class="small" x="${bx + bw / 2}" y="${H - 5}" text-anchor="middle">${k > 0 ? "+" + k : k}</text>`;
+  });
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
+}
+
+// RQ4 pre/post dumbbells
+function chartRQ4() {
+  const M = D.meta, el = body("ch-rq4");
+  const W = el.clientWidth || 1000, half = (W - 150) / 2, L = 140, rowH = 26, T = 22, n = M.actors.length, H = T + n * rowH + 24;
+  const rows = actorOrder().map(ai => {
+    const r = { ai };
+    [1, 2].forEach(pi => {
+      const ps = P.filter(p => p.a === ai && p.per === pi);
+      r["s" + pi] = ps.length ? ps.filter(p => p.nG).length / ps.length : NaN; r["n" + pi] = ps.length;
+      const y = median(ps.filter(p => p.nG && p.sh != null).map(p => p.sh)), no = median(ps.filter(p => !p.nG && p.sh != null).map(p => p.sh));
+      r["r" + pi] = no > 0 ? y / no : NaN;
+    });
+    return r;
+  });
+  const smax = Math.ceil(Math.max(...rows.flatMap(r => [r.s1, r.s2]).filter(isFinite)) * 10) / 10;
+  const xa = v => L + v / smax * (half - 30);
+  const rv = rows.flatMap(r => [r.r1, r.r2]).filter(v => isFinite(v) && v > 0), rlo = Math.min(.5, ...rv), rhi = Math.max(4, ...rv);
+  const X2 = L + half + 10, xb = v => X2 + (Math.log2(v) - Math.log2(rlo)) / (Math.log2(rhi) - Math.log2(rlo)) * (half - 30);
+  let s = `<text class="lab" x="${L}" y="12" style="font-weight:600">Share of posts with guilt assignment</text><text class="lab" x="${X2}" y="12" style="font-weight:600">Sharing advantage (median shares, guilt / no guilt)</text>`;
+  const ta = []; for (let t = 0; t <= smax + 1e-9; t += .1) ta.push(+t.toFixed(2));
+  s += xTicks(xa, ta, T, T + n * rowH, t => Math.round(t * 100) + "%");
+  s += xTicks(xb, [0.5, 1, 2, 4, 8].filter(t => t >= rlo && t <= rhi), T, T + n * rowH, t => "×" + t);
+  s += `<line x1="${xb(1)}" x2="${xb(1)}" y1="${T}" y2="${T + n * rowH}" stroke="var(--ink-3)"/>`;
+  rows.forEach((r, i) => {
+    const y = T + i * rowH + rowH / 2, nm = esc(M.actors[r.ai]);
+    if (isFinite(r.s1) && isFinite(r.s2)) {
+      s += `<line x1="${xa(r.s1)}" x2="${xa(r.s2)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/>`;
+      s += `<circle cx="${xa(r.s1)}" cy="${y}" r="5" fill="var(--political-l)" data-tip="${nm}, pre-election: ${pct(r.s1, 1)} of ${r.n1} posts"/>`;
+      s += `<rect x="${xa(r.s2) - 4.5}" y="${y - 4.5}" width="9" height="9" fill="var(--political-d)" data-tip="${nm}, post-election: ${pct(r.s2, 1)} of ${r.n2} posts"/>`;
+    }
+    if (isFinite(r.r1) && isFinite(r.r2) && r.r1 > 0 && r.r2 > 0) {
+      s += `<line x1="${xb(r.r1)}" x2="${xb(r.r2)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/>`;
+      s += `<circle cx="${xb(r.r1)}" cy="${y}" r="5" fill="var(--political-l)" data-tip="${nm}, pre-election: ×${r.r1.toFixed(2)}"/>`;
+      s += `<rect x="${xb(r.r2) - 4.5}" y="${y - 4.5}" width="9" height="9" fill="var(--political-d)" data-tip="${nm}, post-election: ×${r.r2.toFixed(2)}${r.n2 < 100 ? " (fewer than 100 posts)" : ""}"/>`;
+    }
+  });
+  s += actorLabels(L - 8, T + rowH / 2, rowH, n, W);
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
+  wireActorLinks(el);
+}
+
+// emotions
+function chartEmotions() {
+  const M = D.meta, el = body("ch-emo");
+  const order = M.emotions;
+  $("#emokey").innerHTML = order.map(e => `<span><i class="sq" style="background:${EMOCOL[e] || "var(--rule)"}"></i>${esc(e)}</span>`).join("");
+  const W = el.clientWidth || 1000, L = 140, R = 10, rowH = 24, T = 4, n = M.actors.length, H = T + n * rowH + 24;
+  const x = v => L + v * (W - L - R);
+  let s = xTicks(x, [0, .25, .5, .75, 1], T, T + n * rowH, t => Math.round(t * 100) + "%");
+  actorOrder().forEach((ai, r) => {
+    const cnt = order.map(() => 0); let tot = 0;
+    P.forEach(p => { if (p.a !== ai) return; p.s.forEach(z => { cnt[z[1]]++; tot++; }); });
+    let left = 0; const y = T + r * rowH + 3;
+    order.forEach((e, k) => {
+      const v = tot ? cnt[k] / tot : 0; if (!v) return;
+      s += `<rect x="${x(left)}" y="${y}" width="${Math.max(0, x(left + v) - x(left) - 1)}" height="${rowH - 6}" fill="${EMOCOL[e] || "var(--rule)"}" data-tip="${esc(M.actors[ai])}: ${esc(e)} ${pct(v, 1)} of ${tot.toLocaleString("en-US")} sentences"/>`;
+      if (v > .07) s += `<text x="${x(left + v / 2)}" y="${y + rowH / 2}" text-anchor="middle" style="fill:${EMOCOL[e] ? "#fff" : "var(--ink)"};font-size:11px">${pct(v)}</text>`;
+      left += v;
+    });
+  });
+  s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
+  wireActorLinks(el);
+}
+
+// controls, download, resize
+document.querySelectorAll("#charts .seg").forEach(seg => seg.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  CH[seg.dataset.ctl] = b.dataset.v;
+  seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  drawCharts();
+}));
+document.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => {
+  const fig = $("#" + b.dataset.dl), svgs = fig.querySelectorAll("svg");
+  if (!svgs.length) return;
+  const cs = getComputedStyle(document.documentElement);
+  const vars = ["--ink", "--ink-2", "--ink-3", "--rule", "--rule-soft", "--political", "--media", "--guilt-bg", "--guilt-line", "--panel", "--chip", "--per0", "--per1", "--per2", "--political-l", "--political-d"];
+  const resolve = str => str.replace(/var\((--[\w-]+)\)/g, (_, v) => cs.getPropertyValue(v).trim() || "#888");
+  const style = `<style>text{font:12px Public Sans,Arial,sans-serif;fill:${resolve("var(--ink-2)")}}text.lab{fill:${resolve("var(--ink)")}}text.small{font-size:11px;fill:${resolve("var(--ink-3)")}}.grid{stroke:${resolve("var(--rule-soft)")}}.sep,.axis{stroke:${resolve("var(--rule)")}}.elec{stroke:${resolve("var(--ink-3)")};stroke-dasharray:3 3}</style>`;
+  let out;
+  if (svgs.length === 1) out = svgs[0].outerHTML;
+  else { // small multiples: stack them
+    let y = 0, inner = "";
+    svgs.forEach((sv, i) => { const vb = sv.viewBox.baseVal, title = sv.previousElementSibling ? sv.previousElementSibling.textContent : "";
+      const col = i % 3, row = Math.floor(i / 3); inner += `<g transform="translate(${col * (vb.width + 20)},${row * (vb.height + 30)})"><text class="lab" x="0" y="12" style="font-weight:600">${esc(title)}</text><g transform="translate(0,18)">${sv.innerHTML}</g></g>`; y = (row + 1) * (vb.height + 30); });
+    out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${3 * 320} ${y}" width="${3 * 320}" height="${y}">${inner}</svg>`;
+  }
+  out = resolve(out).replace(/ data-tip="[^"]*"/g, "").replace(/<svg([^>]*)>/, `<svg$1 xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="${resolve("var(--panel)")}"/>${style}`);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([out], { type: "image/svg+xml" }));
+  a.download = b.dataset.dl.replace("ch-", "guilt_") + ".svg"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => { if (!$("#charts").classList.contains("hidden")) drawCharts(); }, 200); });
+</script>
+</body>
+</html>
