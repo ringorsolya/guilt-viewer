@@ -9,7 +9,9 @@ private analysis repository (`results/viewer/corpus.json.gz`) and is available t
 
 - **Browse:** filter by actor/outlet, period and guilt assignment, search the text, read posts with
   guilt-assignment sentences highlighted, and drill into any week from the timeline.
-- **Charts:** interactive figures for data coverage and RQ1–RQ4, each downloadable as SVG.
+- **Charts:** interactive figures for data coverage and RQ1–RQ4, each downloadable as SVG. They open with the
+  project password: `charts.enc` holds only aggregated numbers (counts, shares, medians – no post text),
+  encrypted with AES-256-GCM, and is decrypted in the browser.
 
 The page is published with GitHub Pages by `.github/workflows/pages.yml`, which refuses to publish if a data
 file is ever added.

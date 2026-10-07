@@ -92,7 +92,7 @@ aside.filters label.check { display: flex; align-items: center; gap: 8px; font-s
 aside.filters .group-name { font-size: 12px; color: var(--ink-3); margin: 8px 0 2px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .dot.p { background: var(--political); } .dot.m { background: var(--media); }
-input[type="search"], select, input[type="text"], input[type="number"] {
+input[type="search"], select, input[type="text"], input[type="number"], input[type="password"] {
   width: 100%; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 7px; background: var(--panel);
 }
 .seg { display: flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
@@ -150,6 +150,12 @@ table.sents td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .key .s.g { background: var(--guilt-bg); box-shadow: inset 0 -2px 0 var(--guilt-line); }
 .key .s.a { text-decoration: underline dotted var(--anger-line); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 
+/* ---------- unlock */
+.vsetup { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 20px 22px; max-width: 760px; }
+.vsetup h2 { font: 600 22px/1.3 var(--serif); margin: 0 0 6px; }
+.vsetup p { color: var(--ink-2); margin: 0 0 16px; max-width: 70ch; }
+.vgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.vgrid label { font-size: 13px; font-weight: 600; display: grid; gap: 5px; }
 /* ---------- charts */
 main.charts { max-width: 1180px; margin: 0 auto; padding: 22px 24px 80px; }
 .cintro { color: var(--ink-2); max-width: 78ch; margin: 0 0 18px; font-size: 14px; }
@@ -198,16 +204,16 @@ svg.c .hov:hover { fill: var(--chip); opacity: .6; }
 <header class="top">
   <h1>Guilt corpus viewer</h1>
   <span class="status" id="status">No data loaded</span>
-  <nav class="tabs hidden" id="tabs" role="tablist">
-    <button role="tab" aria-selected="true" data-tab="browse">Browse</button>
-    <button role="tab" aria-selected="false" data-tab="charts">Charts</button>
+  <nav class="tabs" id="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="charts">Charts</button>
+    <button role="tab" aria-selected="false" data-tab="browse">Browse posts</button>
   </nav>
 </header>
 
 <!-- ======================= empty state -->
-<section id="drop">
-  <h2>Open the corpus file to start</h2>
-  <p>Choose <code>corpus.json.gz</code> from the <code>results/viewer</code> folder of the guilt_analysis repository, or drop it here.</p>
+<section id="drop" class="hidden">
+  <h2>Open the corpus file to read the posts</h2>
+  <p>Browsing posts needs the full corpus. Choose <code>corpus.json.gz</code> from the <code>results/viewer</code> folder of the guilt_analysis repository, or drop it here.</p>
   <label class="btn primary" for="file">Open corpus file</label>
   <input id="file" type="file" accept=".gz,.json,application/gzip,application/json" class="sr">
   <p id="loading" class="hidden"></p>
@@ -278,8 +284,19 @@ svg.c .hov:hover { fill: var(--chip); opacity: .6; }
 </main>
 
 <!-- ======================= charts -->
-<main class="charts hidden" id="charts">
-  <p class="cintro">All charts are computed in your browser from the corpus file you opened. Hover any mark for exact values; click an actor or outlet name to read its posts. Each chart can be saved as SVG for slides.</p>
+<main class="charts" id="charts">
+  <section id="unlock" class="vsetup">
+    <h2>Enter the project password</h2>
+    <p>The charts show preliminary, unpublished results, so their data are encrypted. Enter the password shared in the project team to view them. Alternatively, open the corpus file under <button class="linkish" id="unlockOpen" type="button">Browse posts</button>.</p>
+    <form id="unlockForm" class="vgrid" style="align-items:end">
+      <label>Password<input type="password" id="pw" autocomplete="current-password" required></label>
+      <label class="check" style="font-weight:400;display:flex;gap:8px;align-items:center"><input type="checkbox" id="remember"> Remember on this device</label>
+      <div><button class="btn primary" type="submit">Show charts</button></div>
+    </form>
+    <p id="unlockMsg" class="status" style="margin:4px 0 0"></p>
+  </section>
+  <div id="chartsBody" class="hidden">
+  <p class="cintro">Hover any mark for exact values; click an actor or outlet name to read its posts (needs the corpus file). Each chart can be saved as SVG for slides. <span id="chartsSrc"></span></p>
   <div class="cgrid">
     <figure class="chart" id="ch-coverage">
       <h2>Data coverage</h2>
@@ -342,6 +359,7 @@ svg.c .hov:hover { fill: var(--chip); opacity: .6; }
       <div class="ckey" id="emokey"></div>
       <div class="body"></div>
     </figure>
+  </div>
   </div>
 </main>
 
@@ -423,9 +441,10 @@ function init(data) {
   M.actors.forEach((_, i) => F.actors.add(i));
   M.periods.forEach((_, i) => F.periods.add(i));
   buildFilters();
+  if (D.agg) A = D.agg;
   $("#drop").classList.add("hidden");
-  $("#tabs").classList.remove("hidden");
   $("#browse").classList.remove("hidden");
+  if (!$("#charts").classList.contains("hidden")) drawCharts();
   $("#status").textContent = `${M.n_posts.toLocaleString("en-US")} posts · ${M.n_sentences.toLocaleString("en-US")} sentences · exported ${M.generated}`;
   apply();
 }
@@ -631,147 +650,134 @@ window.addEventListener("resize", () => { if (D) apply(); });
 $("#tabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   $("#tabs").querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x === b));
-  $("#browse").classList.toggle("hidden", b.dataset.tab !== "browse");
-  $("#charts").classList.toggle("hidden", b.dataset.tab !== "charts");
-  if (b.dataset.tab === "charts") drawCharts();
+  const t = b.dataset.tab;
+  $("#browse").classList.toggle("hidden", t !== "browse" || !D);
+  $("#drop").classList.toggle("hidden", t !== "browse" || !!D);
+  $("#charts").classList.toggle("hidden", t !== "charts");
+  if (t === "charts") drawCharts();
 });
 
 // ------------------------------------------------------------------ charts
+// All charts draw from one aggregate object A (counts, shares, medians; no post text). It comes either from the
+// loaded corpus file (D.agg) or from the encrypted charts.enc next to the page, unlocked with the project password.
 const CH = { rq1m: "share", wkset: "0", rq2m: "sh", rq2p: "all" };
 const PERCOL = ["var(--per0)", "var(--per1)", "var(--per2)"];
 const EMOCOL = { Anger: "#e34948", Fear: "#4a3aa7", Disgust: "#008300", Sadness: "#2a78d6", Joy: "#eda100" };
-let chartsDrawn = false;
+let A = null;
 
 function wilson(k, n) {
   if (!n) return [NaN, NaN];
   const z = 1.96, p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d, h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
   return [c - h, c + h];
 }
-function median(a) { if (!a.length) return NaN; const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 function pct(v, d = 0) { return isFinite(v) ? (100 * v).toFixed(d) + "%" : "–"; }
 function body(id) { return $(`#${id} .body`); }
-function tipOn(el, html) { el.dataset.tip = html; }
-function actorOrder() { return D.meta.actors.map((a, i) => i); }
-function goBrowse(ai) { // open the posts of one actor in Browse
+function actorOrder() { return A.meta.actors.map((a, i) => i); }
+function weeksAll() { const w = []; for (let x = A.meta.week_min; x <= A.meta.week_max; x += 10080) w.push(x); return w; }
+function goBrowse(ai) {
+  $("#tabs").querySelector('[data-tab="browse"]').click();
+  if (!D) return; // corpus not loaded: Browse shows the open-file screen
   F.actors = new Set([ai]); F.week = null;
   $("#actors").querySelectorAll("input").forEach(c => c.checked = +c.dataset.actor === ai);
-  $("#tabs").querySelector('[data-tab="browse"]').click();
   apply();
 }
-function actorLabels(x, y0, step, n, extra = "") {
-  const M = D.meta;
-  let s = "";
-  actorOrder().forEach((ai, r) => {
-    const y = y0 + r * step;
-    s += `<text class="lab" x="${x}" y="${y + 4}" text-anchor="end" style="cursor:pointer" data-actor-link="${ai}">${esc(M.actors[ai])}</text>`;
-  });
+function actorLabels(x, y0, step, n, xEnd) {
+  const M = A.meta; let s = "";
+  actorOrder().forEach((ai, r) => { s += `<text class="lab" x="${x}" y="${y0 + r * step + 4}" text-anchor="end" style="cursor:pointer" data-actor-link="${ai}">${esc(M.actors[ai])}</text>`; });
   const sep = M.actor_source.findIndex(v => v === 1);
-  if (sep > 0) s += `<line class="sep" x1="${x - 150}" x2="${extra || 2000}" y1="${y0 + (sep - .5) * step}" y2="${y0 + (sep - .5) * step}"/>`;
+  if (sep > 0) s += `<line class="sep" x1="${x - 150}" x2="${xEnd}" y1="${y0 + (sep - .5) * step}" y2="${y0 + (sep - .5) * step}"/>`;
   return s;
 }
 function wireActorLinks(root) { root.querySelectorAll("[data-actor-link]").forEach(t => t.onclick = () => goBrowse(+t.dataset.actorLink)); }
 function xTicks(x, ticks, y0, y1, fmtT) { return ticks.map(t => `<line class="grid" x1="${x(t)}" x2="${x(t)}" y1="${y0}" y2="${y1}"/><text class="small" x="${x(t)}" y="${y1 + 14}" text-anchor="middle">${fmtT(t)}</text>`).join(""); }
+const dShort = (w, o) => dateOf(w).toLocaleDateString("en-GB", Object.assign({ timeZone: "UTC" }, o));
 
 function drawCharts() {
-  if (!D) return;
+  const has = !!A;
+  $("#chartsBody").classList.toggle("hidden", !has);
+  $("#unlock").classList.toggle("hidden", has);
+  if (!has) return;
+  if (!D) $("#status").textContent = "Charts unlocked · open the corpus file to read posts";
+  $("#chartsSrc").textContent = `Chart data: ${A.meta.n_posts.toLocaleString("en-US")} posts, generated ${A.meta.generated}.`;
   chartCoverage(); chartRQ1(); chartWeekly(); chartRQ2(); chartRQ3(); chartRQ4(); chartEmotions();
-  chartsDrawn = true;
 }
 
-// coverage heatmap
 function chartCoverage() {
-  const M = D.meta, el = body("ch-coverage");
+  const M = A.meta, el = body("ch-coverage"), weeks = weeksAll();
   const W = el.clientWidth || 1000, L = 130, R = 10, rowH = 18, T = 4, n = M.actors.length, H = T + n * rowH + 26;
-  const w0 = Math.min(...P.map(p => p.wk)), w1 = Math.max(...P.map(p => p.wk)), weeks = [];
-  for (let w = w0; w <= w1; w += 10080) weeks.push(w);
-  const cnt = new Map(); P.forEach(p => { const k = p.a + ":" + p.wk; cnt.set(k, (cnt.get(k) || 0) + 1); });
-  const cw = (W - L - R) / weeks.length;
+  const cw = (W - L - R) / weeks.length, w0 = weeks[0];
   let s = "";
   actorOrder().forEach((ai, r) => {
     const startW = M.actor_source[ai] ? Date.UTC(2025, 11, 29) / 60000 : Date.UTC(2025, 8, 29) / 60000;
     weeks.forEach((w, c) => {
       if (w < startW) return;
-      const v = cnt.get(ai + ":" + w) || 0;
+      const v = (A.W[ai][w] || [0])[0];
       const op = v ? Math.min(1, .18 + Math.log10(v + 1) / 2.6) : 1;
       const fill = v ? (M.actor_source[ai] ? "var(--media)" : "var(--political)") : "var(--guilt-bg)";
-      const d = dateOf(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-      s += `<rect x="${L + c * cw}" y="${T + r * rowH + 2}" width="${Math.max(1, cw - 1)}" height="${rowH - 4}" fill="${fill}" fill-opacity="${op}" data-tip="${esc(M.actors[ai])}, week of ${d}: ${v} posts"/>`;
+      s += `<rect x="${L + c * cw}" y="${T + r * rowH + 2}" width="${Math.max(1, cw - 1)}" height="${rowH - 4}" fill="${fill}" fill-opacity="${op}" data-tip="${esc(M.actors[ai])}, week of ${dShort(w, { day: "numeric", month: "short", year: "numeric" })}: ${v} posts"/>`;
     });
   });
-  weeks.forEach((w, c) => { const d = dateOf(w); if (d.getUTCDate() <= 7) s += `<text class="small" x="${L + c * cw}" y="${H - 6}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}${d.getUTCMonth() === 0 || c === 0 ? " " + d.getUTCFullYear() : ""}</text>`; });
+  weeks.forEach((w, c) => { const d = dateOf(w); if (d.getUTCDate() <= 7) s += `<text class="small" x="${L + c * cw}" y="${H - 6}">${dShort(w, { month: "short" })}${d.getUTCMonth() === 0 || c === 0 ? " " + d.getUTCFullYear() : ""}</text>`; });
   const ex = L + (ELECTION - w0) / 10080 * cw;
-  s += `<line class="elec" x1="${ex}" x2="${ex}" y1="${T}" y2="${T + n * rowH}"/>`;
-  s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
+  s += `<line class="elec" x1="${ex}" x2="${ex}" y1="${T}" y2="${T + n * rowH}"/>` + actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
   el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
   wireActorLinks(el);
 }
 
-// RQ1 dot plot by actor x period
 function chartRQ1() {
-  const M = D.meta, el = body("ch-rq1"), m = CH.rq1m;
+  const M = A.meta, el = body("ch-rq1"), m = CH.rq1m;
   $("#rq1key").innerHTML = M.periods.map((p, i) => `<span><i style="background:${PERCOL[i]}"></i>${{ baseline: "Baseline (Oct–Dec 2025)", "pre-election": "Pre-election", "post-election": "Post-election" }[p] || p}</span>`).join("");
   const W = el.clientWidth || 1000, L = 140, R = 40, rowH = 30, T = 6, n = M.actors.length, H = T + n * rowH + 24;
   const stats = [];
-  actorOrder().forEach(ai => M.periods.forEach((_, pi) => {
-    const ps = P.filter(p => p.a === ai && p.per === pi); if (!ps.length) return;
-    let v, lo, hi;
-    if (m === "share") { const k = ps.filter(p => p.nG > 0).length; v = k / ps.length; [lo, hi] = wilson(k, ps.length); }
-    else { const xs = ps.map(p => m === "density" ? p.dens : p.nG), mu = xs.reduce((a, b) => a + b, 0) / xs.length;
-      const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mu) ** 2, 0) / Math.max(1, xs.length - 1)), se = sd / Math.sqrt(xs.length); v = mu; lo = mu - 1.96 * se; hi = mu + 1.96 * se; }
-    stats.push({ ai, pi, v, lo: Math.max(0, lo), hi, n: ps.length });
+  actorOrder().forEach(ai => Object.entries(A.rq1[ai] || {}).forEach(([pi, r]) => {
+    const [N, k, md, sdd, mn, sdn] = r; let v, lo, hi;
+    if (m === "share") { v = k / N; [lo, hi] = wilson(k, N); }
+    else { const mu = m === "density" ? md : mn, sd = m === "density" ? sdd : sdn, se = (sd || 0) / Math.sqrt(N); v = mu; lo = mu - 1.96 * se; hi = mu + 1.96 * se; }
+    stats.push({ ai, pi: +pi, v, lo: Math.max(0, lo), hi, n: N });
   }));
-  const xmax = Math.max(...stats.map(s => s.hi)) * 1.05 || 1;
-  const x = v => L + v / xmax * (W - L - R);
+  const xmax = Math.max(...stats.map(s => s.hi)) * 1.05 || 1, x = v => L + v / xmax * (W - L - R);
   const step = m === "n" ? (xmax > 2 ? 0.5 : 0.25) : xmax > .5 ? .1 : .05, ticks = []; for (let t = 0; t <= xmax; t += step) ticks.push(+t.toFixed(3));
   let s = xTicks(x, ticks, T, T + n * rowH, t => m === "n" ? t.toFixed(2) : Math.round(t * 100) + "%");
   stats.forEach(st => {
-    const r = actorOrder().indexOf(st.ai), y = T + r * rowH + rowH / 2 + (st.pi - 1) * 7;
-    const val = m === "n" ? st.v.toFixed(2) : pct(st.v, 1);
+    const y = T + st.ai * rowH + rowH / 2 + (st.pi - 1) * 7, val = m === "n" ? st.v.toFixed(2) : pct(st.v, 1);
+    const ci = m === "n" ? st.lo.toFixed(2) + "–" + st.hi.toFixed(2) : pct(st.lo, 1) + "–" + pct(st.hi, 1);
     s += `<line x1="${x(st.lo)}" x2="${x(st.hi)}" y1="${y}" y2="${y}" stroke="${PERCOL[st.pi]}" stroke-width="1.5"/>`;
-    s += `<circle cx="${x(st.v)}" cy="${y}" r="4.5" fill="${PERCOL[st.pi]}" stroke="var(--panel)" stroke-width="1.5" data-tip="${esc(M.actors[st.ai])}, ${M.periods[st.pi]}: ${val} (95% CI ${m === "n" ? st.lo.toFixed(2) + "–" + st.hi.toFixed(2) : pct(st.lo, 1) + "–" + pct(st.hi, 1)}), ${st.n} posts"/>`;
+    s += `<circle cx="${x(st.v)}" cy="${y}" r="4.5" fill="${PERCOL[st.pi]}" stroke="var(--panel)" stroke-width="1.5" data-tip="${esc(M.actors[st.ai])}, ${M.periods[st.pi]}: ${val} (95% CI ${ci}), ${st.n} posts"/>`;
   });
   s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
   el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
   wireActorLinks(el);
 }
 
-// weekly small multiples
 function chartWeekly() {
-  const M = D.meta, el = body("ch-weekly"), src = +CH.wkset;
-  const w0 = Math.min(...P.filter(p => p.src === src).map(p => p.wk)), w1 = Math.max(...P.filter(p => p.src === src).map(p => p.wk));
-  const agg = new Map(); P.forEach(p => { if (p.src !== src) return; const k = p.a + ":" + p.wk; const v = agg.get(k) || [0, 0]; v[0]++; v[1] += p.nG > 0; agg.set(k, v); });
-  let ymax = 0; agg.forEach(v => { if (v[0] >= 10) ymax = Math.max(ymax, v[1] / v[0]); }); ymax = Math.ceil(ymax * 10) / 10 || .1;
+  const M = A.meta, el = body("ch-weekly"), src = +CH.wkset;
+  const ids = actorOrder().filter(ai => M.actor_source[ai] === src);
+  const wks = ids.flatMap(ai => Object.keys(A.W[ai]).map(Number)), w0 = Math.min(...wks), w1 = Math.max(...wks);
+  let ymax = 0; ids.forEach(ai => Object.values(A.W[ai]).forEach(v => { if (v[0] >= 10) ymax = Math.max(ymax, v[1] / v[0]); })); ymax = Math.ceil(ymax * 10) / 10 || .1;
   const col = src ? "var(--media)" : "var(--political)";
-  el.innerHTML = actorOrder().filter(ai => M.actor_source[ai] === src).map(ai => {
+  el.innerHTML = ids.map(ai => {
     const W = 300, H = 120, L = 30, R = 6, T = 6, B = 18;
     const x = w => L + (w - w0) / Math.max(1, w1 - w0) * (W - L - R), y = v => T + (1 - v / ymax) * (H - T - B);
     let s = "", path = "", pen = false;
     for (let g = 0; g <= ymax + 1e-9; g += ymax > .4 ? .2 : .1) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}"/><text class="small" x="${L - 4}" y="${y(g) + 4}" text-anchor="end">${Math.round(g * 100)}%</text>`;
     for (let w = w0; w <= w1; w += 10080) {
-      const v = agg.get(ai + ":" + w);
+      const v = A.W[ai][w];
       if (!v || v[0] < 10) { pen = false; continue; }
       const px = x(w), py = y(v[1] / v[0]);
       path += (pen ? "L" : "M") + px.toFixed(1) + "," + py.toFixed(1); pen = true;
-      const d = dateOf(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-      s += `<circle cx="${px}" cy="${py}" r="2.4" fill="${col}" data-tip="Week of ${d}: ${pct(v[1] / v[0])} of ${v[0]} posts"/>`;
+      s += `<circle cx="${px}" cy="${py}" r="2.4" fill="${col}" data-tip="Week of ${dShort(w, { day: "numeric", month: "short" })}: ${pct(v[1] / v[0])} of ${v[0]} posts"/>`;
     }
-    s = `<path d="${path}" fill="none" stroke="${col}" stroke-width="1.8"/>` + s;
-    s += `<line class="elec" x1="${x(ELECTION)}" x2="${x(ELECTION)}" y1="${T}" y2="${H - B}"/>`;
-    for (let w = w0; w <= w1; w += 10080) { const d = dateOf(w); if (d.getUTCDate() <= 7 && d.getUTCMonth() % 2 === 0) s += `<text class="small" x="${x(w)}" y="${H - 4}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}</text>`; }
+    s = `<path d="${path}" fill="none" stroke="${col}" stroke-width="1.8"/>` + s + `<line class="elec" x1="${x(ELECTION)}" x2="${x(ELECTION)}" y1="${T}" y2="${H - B}"/>`;
+    for (let w = w0; w <= w1; w += 10080) { const d = dateOf(w); if (d.getUTCDate() <= 7 && d.getUTCMonth() % 2 === 0) s += `<text class="small" x="${x(w)}" y="${H - 4}">${dShort(w, { month: "short" })}</text>`; }
     return `<div><h3 style="cursor:pointer" data-actor-link="${ai}"><span class="dot ${src ? "m" : "p"}"></span>${esc(M.actors[ai])}</h3><svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg></div>`;
   }).join("");
   wireActorLinks(el);
 }
 
-// RQ2 dumbbell (log scale)
 function chartRQ2() {
-  const M = D.meta, el = body("ch-rq2"), key = CH.rq2m, per = CH.rq2p;
+  const M = A.meta, el = body("ch-rq2"), key = CH.rq2m, per = CH.rq2p, tab = A.rq2[per][key];
   const W = el.clientWidth || 1000, L = 140, R = 70, rowH = 26, T = 6, n = M.actors.length, H = T + n * rowH + 24;
-  const rows = actorOrder().map(ai => {
-    const ps = P.filter(p => p.a === ai && (per === "all" || p.per === +per) && p[key] != null);
-    return { ai, no: median(ps.filter(p => !p.nG).map(p => p[key])), yes: median(ps.filter(p => p.nG).map(p => p[key])),
-      nNo: ps.filter(p => !p.nG).length, nYes: ps.filter(p => p.nG).length };
-  });
+  const rows = actorOrder().map(ai => { const r = tab[ai] || [null, null, 0, 0]; return { ai, no: r[0] ?? NaN, yes: r[1] ?? NaN, nNo: r[2], nYes: r[3] }; });
   const vals = rows.flatMap(r => [r.no, r.yes]).filter(v => isFinite(v) && v > 0);
   const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
   const x = v => L + (Math.log10(Math.max(v, lo)) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (W - L - R);
@@ -784,47 +790,40 @@ function chartRQ2() {
     s += `<line x1="${x(r.no)}" x2="${x(r.yes)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/>`;
     s += `<circle cx="${x(r.no)}" cy="${y}" r="5" fill="var(--ink-3)" data-tip="${esc(M.actors[r.ai])}: median ${fmt(r.no)} ${name} without guilt assignment (${r.nNo} posts)"/>`;
     s += `<circle cx="${x(r.yes)}" cy="${y}" r="5" fill="var(--guilt-line)" data-tip="${esc(M.actors[r.ai])}: median ${fmt(r.yes)} ${name} with guilt assignment (${r.nYes} posts)"/>`;
-    const ratio = r.no > 0 ? r.yes / r.no : NaN;
-    s += `<text class="small" x="${W - R + 8}" y="${y + 4}">${isFinite(ratio) ? "×" + ratio.toFixed(2) : ""}</text>`;
+    if (r.no > 0) s += `<text class="small" x="${W - R + 8}" y="${y + 4}">×${(r.yes / r.no).toFixed(2)}</text>`;
   });
   s += actorLabels(L - 8, T + rowH / 2, rowH, n, W - R);
   el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
   wireActorLinks(el);
 }
 
-// RQ3 political vs media weekly + cross-correlation
 function chartRQ3() {
-  const el = body("ch-rq3");
-  const start = Date.UTC(2026, 0, 1) / 60000;
-  const agg = [new Map(), new Map()];
-  P.forEach(p => { if (p.t < start) return; const v = agg[p.src].get(p.wk) || [0, 0]; v[0]++; v[1] += p.nG > 0; agg[p.src].set(p.wk, v); });
-  const weeks = [...new Set([...agg[0].keys(), ...agg[1].keys()])].sort((a, b) => a - b);
+  const el = body("ch-rq3"), agg = A.src_wk;
+  const weeks = [...new Set([...Object.keys(agg[0]), ...Object.keys(agg[1])].map(Number))].sort((a, b) => a - b);
   const w0 = weeks[0], w1 = weeks[weeks.length - 1];
   const W = el.clientWidth || 1000, Wl = Math.max(420, W * 0.66), L = 40, R = 10, T = 8, B = 22, H = 230;
-  const sh = (src, w) => { const v = agg[src].get(w); return v && v[0] >= 10 ? v[1] / v[0] : NaN; };
+  const sh = (src, w) => { const v = agg[src][w]; return v && v[0] >= 10 ? v[1] / v[0] : NaN; };
   let ymax = 0; weeks.forEach(w => [0, 1].forEach(s => { const v = sh(s, w); if (isFinite(v)) ymax = Math.max(ymax, v); })); ymax = Math.ceil(ymax * 10) / 10 || .1;
   const x = w => L + (w - w0) / Math.max(1, w1 - w0) * (Wl - L - R), y = v => T + (1 - v / ymax) * (H - T - B);
   let s = "";
   for (let g = 0; g <= ymax + 1e-9; g += .1) s += `<line class="grid" x1="${L}" x2="${Wl - R}" y1="${y(g)}" y2="${y(g)}"/><text class="small" x="${L - 5}" y="${y(g) + 4}" text-anchor="end">${Math.round(g * 100)}%</text>`;
   [0, 1].forEach(src => {
-    const col = src ? "var(--media)" : "var(--political)"; let path = "", pen = false;
+    const col = src ? "var(--media)" : "var(--political)"; let path = "", pen = false, pts = "";
     for (let w = w0; w <= w1; w += 10080) {
       const v = sh(src, w); if (!isFinite(v)) { pen = false; continue; }
       path += (pen ? "L" : "M") + x(w).toFixed(1) + "," + y(v).toFixed(1); pen = true;
-      const d = dateOf(w).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-      s += `<circle cx="${x(w)}" cy="${y(v)}" r="3" fill="${col}" data-tip="${src ? "News outlets" : "Political actors"}, week of ${d}: ${pct(v)} of ${agg[src].get(w)[0]} posts"/>`;
+      pts += `<circle cx="${x(w)}" cy="${y(v)}" r="3" fill="${col}" data-tip="${src ? "News outlets" : "Political actors"}, week of ${dShort(w, { day: "numeric", month: "short" })}: ${pct(v)} of ${agg[src][w][0]} posts"/>`;
     }
-    s = `<path d="${path}" fill="none" stroke="${col}" stroke-width="2"/>` + s;
+    s += `<path d="${path}" fill="none" stroke="${col}" stroke-width="2"/>` + pts;
   });
   s += `<line class="elec" x1="${x(ELECTION)}" x2="${x(ELECTION)}" y1="${T}" y2="${H - B}"/>`;
-  for (let w = w0; w <= w1; w += 10080) { const d = dateOf(w); if (d.getUTCDate() <= 7) s += `<text class="small" x="${x(w)}" y="${H - 5}">${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}</text>`; }
-  // cross-correlation media(t) vs political(t-k)
+  for (let w = w0; w <= w1; w += 10080) if (dateOf(w).getUTCDate() <= 7) s += `<text class="small" x="${x(w)}" y="${H - 5}">${dShort(w, { month: "short" })}</text>`;
   const series = []; for (let w = w0; w <= w1; w += 10080) series.push([sh(0, w), sh(1, w)]);
   const corr = k => { const a = [], b = []; series.forEach((v, t) => { const u = series[t - k]; if (u && isFinite(v[1]) && isFinite(u[0])) { a.push(u[0]); b.push(v[1]); } });
     const n = a.length; if (n < 5) return [NaN, n]; const ma = a.reduce((p, c) => p + c) / n, mb = b.reduce((p, c) => p + c) / n;
     let num = 0, da = 0, db = 0; for (let i = 0; i < n; i++) { num += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; } return [num / Math.sqrt(da * db), n]; };
   const X0 = Wl + 40, CW = W - X0 - 10, lags = [-2, -1, 0, 1, 2], CT = T + 22, cy = r => CT + (1 - (r + 1) / 2) * (H - CT - B);
-  s += `<text class="lab" x="${X0}" y="${T + 2}" style="font-weight:600">Cross-correlation</text>`;
+  s += `<text class="lab" x="${X0}" y="${T + 6}" style="font-weight:600">Cross-correlation</text>`;
   [-1, -.5, 0, .5, 1].forEach(g => s += `<line class="grid" x1="${X0 + 26}" x2="${X0 + CW}" y1="${cy(g)}" y2="${cy(g)}"/><text class="small" x="${X0 + 22}" y="${cy(g) + 4}" text-anchor="end">${g}</text>`);
   const bw = (CW - 30) / lags.length;
   lags.forEach((k, i) => {
@@ -835,59 +834,38 @@ function chartRQ3() {
   el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
 }
 
-// RQ4 pre/post dumbbells
 function chartRQ4() {
-  const M = D.meta, el = body("ch-rq4");
+  const M = A.meta, el = body("ch-rq4");
   const W = el.clientWidth || 1000, half = (W - 150) / 2, L = 140, rowH = 26, T = 22, n = M.actors.length, H = T + n * rowH + 24;
   const rows = actorOrder().map(ai => {
     const r = { ai };
-    [1, 2].forEach(pi => {
-      const ps = P.filter(p => p.a === ai && p.per === pi);
-      r["s" + pi] = ps.length ? ps.filter(p => p.nG).length / ps.length : NaN; r["n" + pi] = ps.length;
-      const y = median(ps.filter(p => p.nG && p.sh != null).map(p => p.sh)), no = median(ps.filter(p => !p.nG && p.sh != null).map(p => p.sh));
-      r["r" + pi] = no > 0 ? y / no : NaN;
-    });
+    [1, 2].forEach(pi => { const v = (A.rq4[ai] || {})[pi]; r["s" + pi] = v ? v[1] / v[0] : NaN; r["n" + pi] = v ? v[0] : 0; r["r" + pi] = v && v[3] > 0 && v[2] != null ? v[2] / v[3] : NaN; });
     return r;
   });
-  const smax = Math.ceil(Math.max(...rows.flatMap(r => [r.s1, r.s2]).filter(isFinite)) * 10) / 10;
-  const xa = v => L + v / smax * (half - 30);
+  const smax = Math.ceil(Math.max(...rows.flatMap(r => [r.s1, r.s2]).filter(isFinite)) * 10) / 10, xa = v => L + v / smax * (half - 30);
   const rv = rows.flatMap(r => [r.r1, r.r2]).filter(v => isFinite(v) && v > 0), rlo = Math.min(.5, ...rv), rhi = Math.max(4, ...rv);
   const X2 = L + half + 10, xb = v => X2 + (Math.log2(v) - Math.log2(rlo)) / (Math.log2(rhi) - Math.log2(rlo)) * (half - 30);
   let s = `<text class="lab" x="${L}" y="12" style="font-weight:600">Share of posts with guilt assignment</text><text class="lab" x="${X2}" y="12" style="font-weight:600">Sharing advantage (median shares, guilt / no guilt)</text>`;
   const ta = []; for (let t = 0; t <= smax + 1e-9; t += .1) ta.push(+t.toFixed(2));
-  s += xTicks(xa, ta, T, T + n * rowH, t => Math.round(t * 100) + "%");
-  s += xTicks(xb, [0.5, 1, 2, 4, 8].filter(t => t >= rlo && t <= rhi), T, T + n * rowH, t => "×" + t);
+  s += xTicks(xa, ta, T, T + n * rowH, t => Math.round(t * 100) + "%") + xTicks(xb, [0.5, 1, 2, 4, 8].filter(t => t >= rlo && t <= rhi), T, T + n * rowH, t => "×" + t);
   s += `<line x1="${xb(1)}" x2="${xb(1)}" y1="${T}" y2="${T + n * rowH}" stroke="var(--ink-3)"/>`;
   rows.forEach((r, i) => {
     const y = T + i * rowH + rowH / 2, nm = esc(M.actors[r.ai]);
-    if (isFinite(r.s1) && isFinite(r.s2)) {
-      s += `<line x1="${xa(r.s1)}" x2="${xa(r.s2)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/>`;
-      s += `<circle cx="${xa(r.s1)}" cy="${y}" r="5" fill="var(--political-l)" data-tip="${nm}, pre-election: ${pct(r.s1, 1)} of ${r.n1} posts"/>`;
-      s += `<rect x="${xa(r.s2) - 4.5}" y="${y - 4.5}" width="9" height="9" fill="var(--political-d)" data-tip="${nm}, post-election: ${pct(r.s2, 1)} of ${r.n2} posts"/>`;
-    }
-    if (isFinite(r.r1) && isFinite(r.r2) && r.r1 > 0 && r.r2 > 0) {
-      s += `<line x1="${xb(r.r1)}" x2="${xb(r.r2)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/>`;
-      s += `<circle cx="${xb(r.r1)}" cy="${y}" r="5" fill="var(--political-l)" data-tip="${nm}, pre-election: ×${r.r1.toFixed(2)}"/>`;
-      s += `<rect x="${xb(r.r2) - 4.5}" y="${y - 4.5}" width="9" height="9" fill="var(--political-d)" data-tip="${nm}, post-election: ×${r.r2.toFixed(2)}${r.n2 < 100 ? " (fewer than 100 posts)" : ""}"/>`;
-    }
+    if (isFinite(r.s1) && isFinite(r.s2)) s += `<line x1="${xa(r.s1)}" x2="${xa(r.s2)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/><circle cx="${xa(r.s1)}" cy="${y}" r="5" fill="var(--political-l)" data-tip="${nm}, pre-election: ${pct(r.s1, 1)} of ${r.n1} posts"/><rect x="${xa(r.s2) - 4.5}" y="${y - 4.5}" width="9" height="9" fill="var(--political-d)" data-tip="${nm}, post-election: ${pct(r.s2, 1)} of ${r.n2} posts"/>`;
+    if (isFinite(r.r1) && isFinite(r.r2) && r.r1 > 0 && r.r2 > 0) s += `<line x1="${xb(r.r1)}" x2="${xb(r.r2)}" y1="${y}" y2="${y}" stroke="var(--rule)" stroke-width="3"/><circle cx="${xb(r.r1)}" cy="${y}" r="5" fill="var(--political-l)" data-tip="${nm}, pre-election: ×${r.r1.toFixed(2)}"/><rect x="${xb(r.r2) - 4.5}" y="${y - 4.5}" width="9" height="9" fill="var(--political-d)" data-tip="${nm}, post-election: ×${r.r2.toFixed(2)}${r.n2 < 100 ? " (fewer than 100 posts)" : ""}"/>`;
   });
   s += actorLabels(L - 8, T + rowH / 2, rowH, n, W);
   el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
   wireActorLinks(el);
 }
 
-// emotions
 function chartEmotions() {
-  const M = D.meta, el = body("ch-emo");
-  const order = M.emotions;
+  const M = A.meta, el = body("ch-emo"), order = M.emotions;
   $("#emokey").innerHTML = order.map(e => `<span><i class="sq" style="background:${EMOCOL[e] || "var(--rule)"}"></i>${esc(e)}</span>`).join("");
-  const W = el.clientWidth || 1000, L = 140, R = 10, rowH = 24, T = 4, n = M.actors.length, H = T + n * rowH + 24;
-  const x = v => L + v * (W - L - R);
+  const W = el.clientWidth || 1000, L = 140, R = 10, rowH = 24, T = 4, n = M.actors.length, H = T + n * rowH + 24, x = v => L + v * (W - L - R);
   let s = xTicks(x, [0, .25, .5, .75, 1], T, T + n * rowH, t => Math.round(t * 100) + "%");
   actorOrder().forEach((ai, r) => {
-    const cnt = order.map(() => 0); let tot = 0;
-    P.forEach(p => { if (p.a !== ai) return; p.s.forEach(z => { cnt[z[1]]++; tot++; }); });
-    let left = 0; const y = T + r * rowH + 3;
+    const cnt = A.emo[ai] || [], tot = cnt.reduce((a, b) => a + b, 0); let left = 0; const y = T + r * rowH + 3;
     order.forEach((e, k) => {
       const v = tot ? cnt[k] / tot : 0; if (!v) return;
       s += `<rect x="${x(left)}" y="${y}" width="${Math.max(0, x(left + v) - x(left) - 1)}" height="${rowH - 6}" fill="${EMOCOL[e] || "var(--rule)"}" data-tip="${esc(M.actors[ai])}: ${esc(e)} ${pct(v, 1)} of ${tot.toLocaleString("en-US")} sentences"/>`;
@@ -899,6 +877,34 @@ function chartEmotions() {
   el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" height="${H}">${s}</svg>`;
   wireActorLinks(el);
 }
+
+// ------------------------------------------------------------------ unlocking the encrypted chart data
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function unlock(password, quiet = false) {
+  const msg = $("#unlockMsg");
+  if (!quiet) msg.textContent = "Unlocking…";
+  try {
+    const res = await fetch("charts.enc", { cache: "no-cache" });
+    if (!res.ok) throw new Error("no chart data next to this page");
+    const e = await res.json();
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(e.salt), iterations: e.iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(e.iv) }, key, b64(e.ct));
+    A = JSON.parse(new TextDecoder().decode(plain));
+    if ($("#remember").checked) store.set("guiltviewer:pw", password);
+    msg.textContent = "";
+    drawCharts();
+    return true;
+  } catch (err) {
+    if (quiet) return false;
+    msg.textContent = err.name === "OperationError" ? "Wrong password. Ask the project team for the current one." :
+      location.protocol === "file:" ? "This page was opened as a local file, so it cannot read the chart data. Use the published page, or open the corpus file under Browse." :
+      "Could not load the chart data (" + err.message + ").";
+    return false;
+  }
+}
+$("#unlockForm").addEventListener("submit", e => { e.preventDefault(); unlock($("#pw").value); });
+$("#unlockOpen").onclick = () => $("#tabs").querySelector('[data-tab="browse"]').click();
 
 // controls, download, resize
 document.querySelectorAll("#charts .seg").forEach(seg => seg.addEventListener("click", e => {
@@ -928,6 +934,8 @@ document.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => {
   a.download = b.dataset.dl.replace("ch-", "guilt_") + ".svg"; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
+drawCharts();
+{ const pw = store.get("guiltviewer:pw"); if (pw) { $("#remember").checked = true; unlock(pw, true); } }
 let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(() => { if (!$("#charts").classList.contains("hidden")) drawCharts(); }, 200); });
 </script>
 </body>
